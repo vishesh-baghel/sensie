@@ -1,0 +1,509 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTH
+// ============================================================================
+
+enum UserRole {
+  OWNER
+  VISITOR
+}
+
+model User {
+  id             String    @id @default(cuid())
+  username       String?   @unique // Optional for visitors
+  passphraseHash String?   // bcrypt hashed, only for owner
+  role           UserRole  @default(VISITOR)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relationships
+  topics           Topic[]
+  learningSessions LearningSession[]
+  answers          Answer[]
+  reviews          Review[]
+  progress         UserProgress?
+  preferences      UserPreferences?
+  badges           Badge[]
+  analytics        LearningAnalytics[]
+
+  @@index([role])
+}
+
+// ============================================================================
+// LEARNING HIERARCHY
+// ============================================================================
+
+model Topic {
+  id          String      @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  status      TopicStatus @default(QUEUED)
+
+  // Progress tracking
+  masteryPercentage Float @default(0) // 0-100
+
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Relationships
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subtopics       Subtopic[]
+  learningSession LearningSession?
+  reviews         Review[]
+
+  @@unique([userId, name])
+  @@index([userId, status])
+}
+
+enum TopicStatus {
+  QUEUED // Added to learning queue
+  ACTIVE // Currently learning (max 2-3 at a time)
+  COMPLETED // Mastered (hit user's mastery threshold)
+  ARCHIVED // Hidden from view, preserved for reference
+}
+
+model Subtopic {
+  id          String  @id @default(cuid())
+  topicId     String
+  name        String
+  description String?
+  order       Int // For sequential unlocking
+
+  // Progress tracking
+  masteryPercentage Float   @default(0)
+  isLocked          Boolean @default(true) // Unlocks when previous subtopic is completed
+
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  // Relationships
+  topic    Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  concepts Concept[]
+
+  @@unique([topicId, name])
+  @@index([topicId, order])
+}
+
+model Concept {
+  id          String @id @default(cuid())
+  subtopicId  String
+  name        String
+  explanation String @db.Text // LLM-generated explanation
+
+  // Examples and analogies
+  codeExamples String[] // Array of code snippets
+  analogies    String[] // Simple explanations
+
+  // Progress tracking
+  isMastered Boolean @default(false)
+
+  // Metadata
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  masteredAt DateTime?
+
+  // Relationships
+  subtopic      Subtopic       @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
+  questions     Question[]
+  cache         ConceptCache?
+  prerequisites Concept[]      @relation("ConceptPrerequisites")
+  dependents    Concept[]      @relation("ConceptPrerequisites")
+
+  @@unique([subtopicId, name])
+  @@index([subtopicId, isMastered])
+}
+
+// ============================================================================
+// QUESTIONS & ANSWERS (Socratic Method)
+// ============================================================================
+
+model Question {
+  id         String       @id @default(cuid())
+  conceptId  String
+  text       String       @db.Text
+  type       QuestionType
+  difficulty Int          @default(2) // 1-5
+
+  // Socratic elements
+  expectedElements String[] // Key points that should be in answer
+  hints            String[] // Progressive hints (3 levels)
+  followUpPrompts  String[] // If answer is shallow
+
+  // Metadata
+  createdAt DateTime @default(now())
+
+  // Relationships
+  concept Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  answers Answer[]
+
+  @@index([conceptId, difficulty])
+}
+
+enum QuestionType {
+  RECALL // "What is X?"
+  UNDERSTANDING // "Why does X work?"
+  APPLICATION // "How would you use X?"
+  ANALYSIS // "Compare X and Y"
+  SYNTHESIS // "Combine X and Y to solve Z"
+}
+
+model Answer {
+  id        String @id @default(cuid())
+  questionId String
+  userId     String
+  sessionId  String // Link to learning session
+
+  // Answer data
+  text      String      @db.Text
+  isCorrect Boolean
+  depth     AnswerDepth
+
+  // Metadata
+  hintsUsed     Int  @default(0)
+  timeToAnswer  Int? // Seconds
+  attemptNumber Int  @default(1) // How many attempts for this question
+
+  // Privacy (for visitor mode)
+  isPrivate Boolean @default(false) // Owner can mark answers as private
+
+  createdAt DateTime @default(now())
+
+  // Relationships
+  question Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session  LearningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, questionId])
+  @@index([sessionId])
+}
+
+enum AnswerDepth {
+  NONE // Completely wrong
+  SHALLOW // Correct but lacks depth
+  DEEP // Correct with good understanding
+}
+
+// ============================================================================
+// LEARNING SESSIONS (Chat)
+// ============================================================================
+
+model LearningSession {
+  id      String @id @default(cuid())
+  userId  String
+  topicId String @unique // One active session per topic
+
+  // Session state
+  currentSubtopicId String?
+  currentConceptId  String?
+  currentQuestionId String? // For exact resume
+  isActive          Boolean @default(true)
+
+  // Skip tracking (3 max per session)
+  skipsUsed          Int      @default(0)
+  skippedQuestionIds String[] // Questions to revisit before unlocking next subtopic
+
+  // Attempt tracking for current question
+  currentAttempts Int @default(0)
+  hintsUsed       Int @default(0)
+
+  // Metadata
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastActivity DateTime  @default(now())
+  endedAt      DateTime?
+
+  // Relationships
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic    Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  messages Message[]
+  answers  Answer[]
+
+  @@index([userId, isActive])
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  sessionId String
+  role      MessageRole
+  content   String      @db.Text
+
+  // Message metadata
+  metadata Json? // For question IDs, feedback, etc.
+
+  createdAt DateTime @default(now())
+
+  // Relationships
+  session LearningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
+
+enum MessageRole {
+  SENSIE // Sensie's message
+  USER // User's message
+  SYSTEM // System messages (concept unlocked, etc.)
+}
+
+// ============================================================================
+// SPACED REPETITION
+// ============================================================================
+
+model Review {
+  id     String @id @default(cuid())
+  userId String
+
+  // What's being reviewed (can be topic, subtopic, or concept)
+  topicId    String
+  subtopicId String?
+  conceptId  String?
+  type       ReviewType
+
+  // FSRS Algorithm Parameters (ts-fsrs library)
+  stability     Float @default(0) // How well the memory is retained
+  difficulty    Float @default(0) // How hard the card is
+  elapsedDays   Int   @default(0) // Days since last review
+  scheduledDays Int   @default(0) // Days until next review
+  reps          Int   @default(0) // Number of successful reviews
+  lapses        Int   @default(0) // Number of times forgotten
+  state         Int   @default(0) // FSRS state: New(0), Learning(1), Review(2), Relearning(3)
+
+  // Scheduling
+  lastReviewed DateTime?
+  nextReview   DateTime // Card due date
+  status       ReviewStatus @default(NEW)
+
+  // Performance tracking
+  lastRating Int? // FSRS Rating: Again(1), Hard(2), Good(3), Easy(4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([userId, nextReview, status])
+  @@index([userId, status])
+}
+
+enum ReviewType {
+  TOPIC
+  SUBTOPIC
+  CONCEPT
+}
+
+enum ReviewStatus {
+  NEW // Never reviewed
+  LEARNING // In learning phase (short intervals)
+  GRADUATED // Mastered (long intervals)
+  LAPSED // Forgotten, needs re-learning
+}
+
+// ============================================================================
+// GAMIFICATION (Skeleton for MVP)
+// ============================================================================
+
+model UserProgress {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // XP and Level
+  totalXP      Int @default(0)
+  currentLevel Int @default(1) // 1-10
+
+  // Streaks
+  currentStreak    Int      @default(0)
+  longestStreak    Int      @default(0)
+  lastActivityDate DateTime @default(now())
+  streakFreezes    Int      @default(0) // Earned streak freezes available
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Badge {
+  id        String   @id @default(cuid())
+  userId    String
+  badgeType String // "first_blood", "bookworm", "on_fire_7", etc.
+  earnedAt  DateTime @default(now())
+
+  // Badge metadata
+  name        String // "First Blood"
+  description String // "Answer your first question correctly"
+  icon        String // Emoji
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeType])
+  @@index([userId])
+}
+
+model LearningAnalytics {
+  id     String   @id @default(cuid())
+  userId String
+  date   DateTime @default(now()) @db.Date
+
+  // Daily metrics
+  questionsAnswered Int @default(0)
+  questionsCorrect  Int @default(0)
+  conceptsMastered  Int @default(0)
+  reviewsCompleted  Int @default(0)
+  timeSpent         Int @default(0) // Minutes
+  xpEarned          Int @default(0) // XP earned today
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+model UserPreferences {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Learning preferences
+  dailyGoal            Int    @default(30) // Minutes per day
+  reviewFrequency      String @default("daily") // daily, weekly
+  difficultyPreference Int    @default(3) // 1-5
+  masteryThreshold     Int    @default(80) // 50, 70, 80, 90, or 100
+
+  // AI Model preferences
+  aiProvider     String  @default("anthropic") // "anthropic" | "openai"
+  preferredModel String? // null = use task-based defaults
+
+  // UI preferences
+  theme            String @default("dark")
+  personalityLevel String @default("full") // full, balanced, minimal
+
+  // Notifications (In-App Only)
+  reviewReminders   Boolean @default(true)
+  achievementAlerts Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// CONTENT CACHING
+// ============================================================================
+
+model ConceptCache {
+  id        String @id @default(cuid())
+  conceptId String @unique
+
+  // Cached content (stable explanations)
+  coreExplanation      String   @db.Text
+  keyPoints            String[] // Essential facts
+  commonMisconceptions String[] // What learners often get wrong
+  prerequisites        String[] // Required prior knowledge
+
+  // Cache metadata
+  cacheVersion Int      @default(1) // Increment on curriculum updates
+  cachedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+}
+
+// ============================================================================
+// FEYNMAN TECHNIQUE
+// ============================================================================
+
+model FeynmanExercise {
+  id     String @id @default(cuid())
+  userId String
+
+  // What's being explained
+  topicId    String
+  subtopicId String?
+  conceptId  String?
+  conceptName String
+
+  // Exercise state
+  status         FeynmanStatus @default(IN_PROGRESS)
+  targetAudience String        @default("child") // child, beginner, peer
+  explanation    String        @db.Text // User's current explanation
+  previousAttempts String[]    // Previous explanation attempts
+  attempts       Int           @default(0)
+
+  // Evaluation (stored as JSON)
+  evaluation Json? // FeynmanEvaluation type
+
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([userId, status])
+  @@index([userId, topicId])
+}
+
+enum FeynmanStatus {
+  PENDING         // Not started
+  IN_PROGRESS     // User is writing explanation
+  NEEDS_REFINEMENT // Evaluated but not approved
+  COMPLETED       // Explanation approved
+}
+
+// ============================================================================
+// ADVANCED GAP DETECTION
+// ============================================================================
+
+model KnowledgeGapRecord {
+  id     String @id @default(cuid())
+  userId String
+  topicId String
+
+  // Gap details
+  conceptId   String?
+  subtopicId  String?
+  gapType     String   // misconception, missing_prerequisite, shallow_understanding
+  severity    String   // minor, moderate, critical
+  description String   @db.Text
+  evidence    String   @db.Text // What indicated this gap
+
+  // Tracking
+  frequency     Int      @default(1) // How often this gap has been detected
+  lastOccurrence DateTime @default(now())
+  isResolved    Boolean  @default(false)
+  resolvedAt    DateTime?
+
+  // Related data
+  relatedMisconceptions String[]
+  suggestedResources    String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, topicId])
+  @@index([userId, isResolved])
+}
