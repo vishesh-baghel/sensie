@@ -105,7 +105,21 @@ export default function TopicsPage() {
       }
 
       const data = await response.json();
-      setTopics([data.topic, ...topics]);
+      const newTopic = data.topic;
+
+      // Only add to current list if the topic's status matches the current filter
+      // QUEUED topics should not appear in the ACTIVE tab
+      if (newTopic.status === filter) {
+        setTopics([newTopic, ...topics]);
+      } else if (newTopic.status === 'QUEUED' && filter === 'ACTIVE') {
+        // Topic was queued due to limit - switch to QUEUED tab to show it
+        setFilter('QUEUED');
+        setTopics([newTopic]);
+      } else {
+        // Refresh to get correct list
+        await fetchTopics();
+      }
+
       setNewTopicName('');
       setNewTopicGoal('');
       setShowNewTopic(false);
