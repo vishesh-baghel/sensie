@@ -194,13 +194,46 @@ describe('Chat Commands', () => {
         expect(result.message).toContain("You've used all 3 hints");
       });
 
-      it('should require an active question', async () => {
+      it('should use conversation context when no currentQuestionId', async () => {
         const { getSessionById } = await import('@/lib/db/sessions');
+        const { prisma } = await import('@/lib/db/client');
+
         (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
           id: 'session-123',
           hintsUsed: 0,
           currentQuestionId: null,
         });
+
+        // Mock conversation messages with a question from Sensie
+        (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+          { id: 'msg-1', role: 'SENSIE', content: 'What do you think is the purpose of ownership in Rust?' },
+          { id: 'msg-2', role: 'USER', content: 'I am not sure' },
+        ]);
+
+        (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+        const result = await executeCommand('/hint', mockContext);
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('Hint 1/3');
+        expect(result.message).toContain('fundamental concept');
+      });
+
+      it('should return no active question when no questions in conversation', async () => {
+        const { getSessionById } = await import('@/lib/db/sessions');
+        const { prisma } = await import('@/lib/db/client');
+
+        (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+          id: 'session-123',
+          hintsUsed: 0,
+          currentQuestionId: null,
+        });
+
+        // No questions in the conversation
+        (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+          { id: 'msg-1', role: 'SENSIE', content: 'Welcome to your training, apprentice!' },
+          { id: 'msg-2', role: 'USER', content: 'Hello!' },
+        ]);
 
         const result = await executeCommand('/hint', mockContext);
 
@@ -531,7 +564,7 @@ describe('Chat Commands', () => {
         expect(result.message).toContain('Session not found');
       });
 
-      it('should handle question not found', async () => {
+      it('should fall back to conversation context when question not found', async () => {
         const { getSessionById } = await import('@/lib/db/sessions');
         const { prisma } = await import('@/lib/db/client');
 
@@ -543,10 +576,115 @@ describe('Chat Commands', () => {
 
         (prisma.question.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
+        // Mock conversation with a question from Sensie
+        (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+          { id: 'msg-1', role: 'SENSIE', content: 'How does memory management work in Rust?' },
+          { id: 'msg-2', role: 'USER', content: 'Not sure' },
+        ]);
+
+        (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+        const result = await executeCommand('/hint', mockContext);
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('Hint 1/3');
+      });
+
+      it('should show no active question when question not found and no conversation questions', async () => {
+        const { getSessionById } = await import('@/lib/db/sessions');
+        const { prisma } = await import('@/lib/db/client');
+
+        (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+          id: 'session-123',
+          hintsUsed: 0,
+          currentQuestionId: 'q-123',
+        });
+
+        (prisma.question.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+        // No questions in conversation either
+        (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+          { id: 'msg-1', role: 'SENSIE', content: 'Great job so far!' },
+        ]);
+
         const result = await executeCommand('/hint', mockContext);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Question not found');
+        expect(result.message).toContain('No active question');
+      });
+
+      it('should return progressive hints from conversation context', async () => {
+        const { getSessionById } = await import('@/lib/db/sessions');
+        const { prisma } = await import('@/lib/db/client');
+
+        // First hint (hintsUsed = 0)
+        (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+          id: 'session-123',
+          hintsUsed: 1, // Already used 1 hint
+          currentQuestionId: null,
+        });
+
+        (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+          { id: 'msg-1', role: 'SENSIE', content: 'What makes ownership unique in Rust?' },
+        ]);
+
+        (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+        const result = await executeCommand('/hint', mockContext);
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('Hint 2/3');
+        expect(result.message).toContain('Break down');
+      });
+
+      it('should ignore hint messages when looking for questions', async () => {
+        const { getSessionById } = await import('@/lib/db/sessions');
+        const { prisma } = await import('@/lib/db/client');
+
+        (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+          id: 'session-123',
+          hintsUsed: 0,
+          currentQuestionId: null,
+        });
+
+        // Most recent Sensie message is a hint, should find the earlier question
+        (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+          { id: 'msg-3', role: 'SENSIE', content: '**Hint 1/3:** Think about it...' },
+          { id: 'msg-2', role: 'USER', content: 'I need a hint' },
+          { id: 'msg-1', role: 'SENSIE', content: 'What is the borrow checker?' },
+        ]);
+
+        (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+        const result = await executeCommand('/hint', mockContext);
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('Hint 1/3');
+      });
+
+      it('should ignore progress messages when looking for questions', async () => {
+        const { getSessionById } = await import('@/lib/db/sessions');
+        const { prisma } = await import('@/lib/db/client');
+
+        (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+          id: 'session-123',
+          hintsUsed: 0,
+          currentQuestionId: null,
+        });
+
+        // Most recent Sensie message is a progress report, should find the earlier question
+        (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+          { id: 'msg-3', role: 'SENSIE', content: '**Your Training Progress**\nLevel 5...' },
+          { id: 'msg-2', role: 'USER', content: '/progress' },
+          { id: 'msg-1', role: 'SENSIE', content: 'Why do we need lifetimes?' },
+        ]);
+
+        (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+        const result = await executeCommand('/hint', mockContext);
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('Hint 1/3');
       });
 
       it('should use fallback hint when hints array is empty', async () => {

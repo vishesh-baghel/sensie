@@ -694,6 +694,155 @@ describe('Chat Commands Integration', () => {
     });
   });
 
+  describe('Hint Command Conversation Context Fallback', () => {
+    it('should use conversation context when no currentQuestionId', async () => {
+      const { getTopicById } = await import('@/lib/db/topics');
+      const { getActiveSession, getSessionById } = await import('@/lib/db/sessions');
+      const { prisma } = await import('@/lib/db/client');
+
+      (getTopicById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 't-1', userId: 'user-123', name: 'Rust',
+      });
+      (getActiveSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1', topicId: 't-1',
+      });
+      (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1',
+        hintsUsed: 0,
+        currentQuestionId: null, // No formal question tracked
+      });
+
+      // Mock conversation with a question from Sensie
+      (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { id: 'msg-1', role: 'SENSIE', content: 'What do you think makes ownership unique in Rust?' },
+        { id: 'msg-2', role: 'USER', content: 'I am not sure' },
+      ]);
+
+      (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+      const request = createMockRequest({
+        messages: [{ role: 'user', content: '/hint' }],
+        topicId: 't-1',
+      });
+
+      const response = await messageHandler(request);
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain('Hint 1/3');
+      expect(text.toLowerCase()).toContain('fundamental');
+    });
+
+    it('should return progressive hints from conversation context', async () => {
+      const { getTopicById } = await import('@/lib/db/topics');
+      const { getActiveSession, getSessionById } = await import('@/lib/db/sessions');
+      const { prisma } = await import('@/lib/db/client');
+
+      (getTopicById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 't-1', userId: 'user-123', name: 'Rust',
+      });
+      (getActiveSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1', topicId: 't-1',
+      });
+      (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1',
+        hintsUsed: 1, // Already used 1 hint
+        currentQuestionId: null,
+      });
+
+      (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { id: 'msg-1', role: 'SENSIE', content: 'How would you describe memory management in Rust?' },
+      ]);
+
+      (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+      const request = createMockRequest({
+        messages: [{ role: 'user', content: '/hint' }],
+        topicId: 't-1',
+      });
+
+      const response = await messageHandler(request);
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain('Hint 2/3');
+      expect(text.toLowerCase()).toContain('break down');
+    });
+
+    it('should ignore hint messages when looking for questions', async () => {
+      const { getTopicById } = await import('@/lib/db/topics');
+      const { getActiveSession, getSessionById } = await import('@/lib/db/sessions');
+      const { prisma } = await import('@/lib/db/client');
+
+      (getTopicById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 't-1', userId: 'user-123', name: 'Rust',
+      });
+      (getActiveSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1', topicId: 't-1',
+      });
+      (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1',
+        hintsUsed: 0,
+        currentQuestionId: null,
+      });
+
+      // Most recent message is a hint, should find the earlier question
+      (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { id: 'msg-3', role: 'SENSIE', content: '**Hint 1/3:** Think about memory...' },
+        { id: 'msg-2', role: 'USER', content: '/hint' },
+        { id: 'msg-1', role: 'SENSIE', content: 'What is the borrow checker?' },
+      ]);
+
+      (prisma.learningSession.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+      const request = createMockRequest({
+        messages: [{ role: 'user', content: '/hint' }],
+        topicId: 't-1',
+      });
+
+      const response = await messageHandler(request);
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain('Hint 1/3');
+    });
+
+    it('should return no active question when no questions in conversation', async () => {
+      const { getTopicById } = await import('@/lib/db/topics');
+      const { getActiveSession, getSessionById } = await import('@/lib/db/sessions');
+      const { prisma } = await import('@/lib/db/client');
+
+      (getTopicById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 't-1', userId: 'user-123', name: 'Rust',
+      });
+      (getActiveSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1', topicId: 't-1',
+      });
+      (getSessionById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 's-1',
+        hintsUsed: 0,
+        currentQuestionId: null,
+      });
+
+      // No questions in conversation - only statements
+      (prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { id: 'msg-2', role: 'SENSIE', content: 'Welcome to your training, young apprentice!' },
+        { id: 'msg-1', role: 'USER', content: 'Hello Sensie' },
+      ]);
+
+      const request = createMockRequest({
+        messages: [{ role: 'user', content: '/hint' }],
+        topicId: 't-1',
+      });
+
+      const response = await messageHandler(request);
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text.toLowerCase()).toContain('no active question');
+    });
+  });
+
   describe('Hint Command Edge Cases', () => {
     it('should handle hint when all hints used', async () => {
       const { getTopicById } = await import('@/lib/db/topics');

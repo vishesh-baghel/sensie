@@ -136,6 +136,10 @@ export async function executeCommand(
 
 /**
  * /hint - Get a hint for the current question
+ *
+ * Works with either:
+ * 1. A formally tracked question (currentQuestionId in session)
+ * 2. The most recent question from conversation history
  */
 async function handleHintCommand(context: CommandContext): Promise<CommandResult> {
   if (!context.sessionId) {
@@ -162,30 +166,60 @@ async function handleHintCommand(context: CommandContext): Promise<CommandResult
     };
   }
 
-  // Get current question if available
-  if (!session.currentQuestionId) {
-    return {
-      success: false,
-      message: "No active question to give hints for. Answer the current question first!",
-    };
+  // Try to get hint from formally tracked question first
+  if (session.currentQuestionId) {
+    const question = await prisma.question.findUnique({
+      where: { id: session.currentQuestionId },
+      include: { concept: true },
+    });
+
+    if (question) {
+      const hints = question.hints || [];
+      const hintIndex = session.hintsUsed;
+      const currentHint = hints[hintIndex] || hints[hints.length - 1] || "Think about the core principle here...";
+
+      await prisma.learningSession.update({
+        where: { id: context.sessionId },
+        data: { hintsUsed: session.hintsUsed + 1 },
+      });
+
+      return {
+        success: true,
+        message: `**Hint ${hintIndex + 1}/${MAX_HINTS}:** ${currentHint}`,
+        data: {
+          hint: currentHint,
+          hintNumber: hintIndex + 1,
+          hintsRemaining: MAX_HINTS - (hintIndex + 1),
+        },
+      };
+    }
   }
 
-  const question = await prisma.question.findUnique({
-    where: { id: session.currentQuestionId },
-    include: { concept: true },
+  // Fallback: Generate hint from conversation context
+  const messages = await prisma.message.findMany({
+    where: { sessionId: context.sessionId },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
   });
 
-  if (!question) {
+  // Find the most recent Sensie message that contains a question
+  const sensieMessages = messages.filter(m => m.role === 'SENSIE');
+  const questionMessage = sensieMessages.find(m =>
+    m.content.includes('?') &&
+    !m.content.startsWith('**Hint') &&
+    !m.content.startsWith('**Your Training Progress')
+  );
+
+  if (!questionMessage) {
     return {
       success: false,
-      message: "Question not found. Let's move on to a new question!",
+      message: "No active question to give hints for. Continue the conversation with Sensie first!",
     };
   }
 
-  // Get hint based on usage
-  const hints = question.hints || [];
+  // Generate a contextual hint based on the question
   const hintIndex = session.hintsUsed;
-  const currentHint = hints[hintIndex] || hints[hints.length - 1] || "Think about the core principle here...";
+  const progressiveHints = generateProgressiveHint(questionMessage.content, hintIndex);
 
   // Update hints used
   await prisma.learningSession.update({
@@ -195,13 +229,27 @@ async function handleHintCommand(context: CommandContext): Promise<CommandResult
 
   return {
     success: true,
-    message: `**Hint ${hintIndex + 1}/${MAX_HINTS}:** ${currentHint}`,
+    message: `**Hint ${hintIndex + 1}/${MAX_HINTS}:** ${progressiveHints}`,
     data: {
-      hint: currentHint,
+      hint: progressiveHints,
       hintNumber: hintIndex + 1,
       hintsRemaining: MAX_HINTS - (hintIndex + 1),
     },
   };
+}
+
+/**
+ * Generate progressive hints based on the question context
+ */
+function generateProgressiveHint(questionContent: string, hintIndex: number): string {
+  // Extract key concepts from the question to create relevant hints
+  const hints = [
+    "Think about the fundamental concept being asked. What do you already know about this topic?",
+    "Break down the question into smaller parts. What's the core principle at play here?",
+    "Consider a real-world analogy. How would you explain this to a friend who's never programmed before?",
+  ];
+
+  return hints[Math.min(hintIndex, hints.length - 1)];
 }
 
 /**

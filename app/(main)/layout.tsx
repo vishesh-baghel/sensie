@@ -1,10 +1,12 @@
 import { Sidebar } from '@/components/layout/sidebar';
+import { MobileNav } from '@/components/layout/mobile-nav';
 
 /**
  * Main App Layout
  *
  * Layout for authenticated pages with:
- * - Collapsible sidebar navigation
+ * - Collapsible sidebar navigation (desktop)
+ * - Hamburger menu with slide-out drawer (mobile)
  * - Theme toggle
  * - Logout button
  * - Main content area
@@ -16,7 +18,10 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Mobile Navigation - visible only on mobile */}
+      <MobileNav />
+
       {/* Sidebar - hidden on mobile */}
       <div className="hidden md:block">
         <Sidebar />
