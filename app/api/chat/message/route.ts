@@ -6,7 +6,7 @@ import { getActiveSession, createSession, addMessage } from '@/lib/db/sessions';
 import { getTopicById } from '@/lib/db/topics';
 import { sensieAgent } from '@/lib/mastra/agents/sensie';
 import { SENSIE_SYSTEM_PROMPT } from '@/lib/mastra/prompts';
-import { isCommand, parseCommand, executeCommand } from '@/lib/chat/commands';
+import { isSlashCommand, parseCommand, executeCommand, SUPPORTED_COMMANDS } from '@/lib/chat/commands';
 
 /**
  * POST /api/chat/message
@@ -39,8 +39,9 @@ export async function POST(request: NextRequest) {
       ? extractMessageContent(lastUserMessage)
       : null;
 
-    // Check if the message is a command
-    if (messageContent && isCommand(messageContent)) {
+    // Check if the message looks like a command (starts with /)
+    // This catches both valid and invalid commands for proper error messages
+    if (messageContent && isSlashCommand(messageContent)) {
       return handleCommandMessage(session, messageContent, topicId);
     }
 
@@ -171,7 +172,7 @@ async function handleCommandMessage(
   const { command, args } = parseCommand(messageContent);
 
   if (!command) {
-    return createCommandResponse("I didn't recognize that command. Try /hint, /skip, /progress, /topics, /review, /quiz, /break, or /continue.");
+    return createCommandResponse(`I didn't recognize that command. Available commands: ${SUPPORTED_COMMANDS.join(', ')}`);
   }
 
   // Get learning session if we have a topicId

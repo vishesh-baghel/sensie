@@ -56,11 +56,31 @@ export interface CommandResult {
 }
 
 /**
- * Check if a message is a command
+ * Check if a message is a known/supported command
+ * Returns true only for messages starting with a SUPPORTED_COMMANDS prefix
  */
 export function isCommand(message: string): boolean {
   const trimmed = message.trim().toLowerCase();
   return SUPPORTED_COMMANDS.some((cmd) => trimmed.startsWith(cmd));
+}
+
+/**
+ * Check if a message looks like a slash command (starts with /)
+ * This catches both valid and invalid commands so they can be routed
+ * through the command handler for proper error messages.
+ *
+ * Use this in the route handler to intercept all /-prefixed messages.
+ * Then use parseCommand() to determine if it's a known command.
+ */
+export function isSlashCommand(message: string): boolean {
+  const trimmed = message.trim();
+  // Must start with / and have at least one character after it
+  if (!trimmed.startsWith('/') || trimmed.length < 2) {
+    return false;
+  }
+  // Check that there's at least one non-whitespace character after /
+  const afterSlash = trimmed.slice(1).trim();
+  return afterSlash.length > 0;
 }
 
 /**

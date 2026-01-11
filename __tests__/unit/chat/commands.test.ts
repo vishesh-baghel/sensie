@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   isCommand,
+  isSlashCommand,
   parseCommand,
   executeCommand,
   SUPPORTED_COMMANDS,
@@ -123,7 +124,9 @@ describe('Chat Commands', () => {
       expect(isCommand('Show me /progress')).toBe(false);
     });
 
-    it('should return false for unknown commands', () => {
+    it('should return false for unknown commands (valid commands only)', () => {
+      // isCommand only returns true for SUPPORTED_COMMANDS
+      // Use isSlashCommand for detecting any /-prefixed message
       expect(isCommand('/unknown')).toBe(false);
       expect(isCommand('/help')).toBe(false);
       expect(isCommand('/exit')).toBe(false);
@@ -133,6 +136,62 @@ describe('Chat Commands', () => {
       expect(isCommand('')).toBe(false);
       expect(isCommand('   ')).toBe(false);
       expect(isCommand('\n\t')).toBe(false);
+    });
+  });
+
+  describe('isSlashCommand', () => {
+    it('should return true for valid commands', () => {
+      expect(isSlashCommand('/hint')).toBe(true);
+      expect(isSlashCommand('/skip')).toBe(true);
+      expect(isSlashCommand('/progress')).toBe(true);
+      expect(isSlashCommand('/topics')).toBe(true);
+    });
+
+    it('should return true for unknown commands (any /-prefixed message)', () => {
+      // This is the key difference from isCommand - it catches any / prefix
+      expect(isSlashCommand('/unknown')).toBe(true);
+      expect(isSlashCommand('/help')).toBe(true);
+      expect(isSlashCommand('/exit')).toBe(true);
+      expect(isSlashCommand('/foobar')).toBe(true);
+      expect(isSlashCommand('/123')).toBe(true);
+    });
+
+    it('should return true for commands with trailing text', () => {
+      expect(isSlashCommand('/unknowncommand with args')).toBe(true);
+      expect(isSlashCommand('/hint please')).toBe(true);
+    });
+
+    it('should handle case variations', () => {
+      expect(isSlashCommand('/UNKNOWN')).toBe(true);
+      expect(isSlashCommand('/Help')).toBe(true);
+    });
+
+    it('should handle leading/trailing whitespace', () => {
+      expect(isSlashCommand('  /unknown  ')).toBe(true);
+      expect(isSlashCommand('\n/foo\n')).toBe(true);
+    });
+
+    it('should return false for regular messages', () => {
+      expect(isSlashCommand('Hello Sensie')).toBe(false);
+      expect(isSlashCommand('What is ownership?')).toBe(false);
+      expect(isSlashCommand('I think the answer is...')).toBe(false);
+    });
+
+    it('should return false for messages containing / but not starting with it', () => {
+      expect(isSlashCommand('I need a /hint')).toBe(false);
+      expect(isSlashCommand('path/to/file')).toBe(false);
+      expect(isSlashCommand('http://example.com')).toBe(false);
+    });
+
+    it('should return false for empty or whitespace-only messages', () => {
+      expect(isSlashCommand('')).toBe(false);
+      expect(isSlashCommand('   ')).toBe(false);
+      expect(isSlashCommand('\n\t')).toBe(false);
+    });
+
+    it('should return false for just a slash', () => {
+      expect(isSlashCommand('/')).toBe(false);
+      expect(isSlashCommand('/ ')).toBe(false);
     });
   });
 
