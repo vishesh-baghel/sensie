@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { requireAuth } from '@/lib/auth/auth';
-import { getTopicById, updateTopicStatus } from '@/lib/db/topics';
+import { getTopicById, updateTopicStatus, countActiveTopics } from '@/lib/db/topics';
 import { createSession, getActiveSession } from '@/lib/db/sessions';
 import { prisma } from '@/lib/db/client';
 import { teachConcept, suggestNextConcept } from '@/lib/mastra/agents/sensie';
+
+// Bug #7 fix: Enforce topic limits when starting a queued topic
+const MAX_ACTIVE_TOPICS_OWNER = 3;
+const MAX_ACTIVE_TOPICS_VISITOR = 1;
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -93,8 +97,21 @@ export async function POST(
         currentConceptId: firstConcept?.id,
       });
 
-      // Update topic status to ACTIVE if it was QUEUED
+      // Bug #7 fix: Check active topic limit before activating a QUEUED topic
       if (topic.status === 'QUEUED') {
+        const maxActive = session.role === 'visitor' ? MAX_ACTIVE_TOPICS_VISITOR : MAX_ACTIVE_TOPICS_OWNER;
+        const activeCount = await countActiveTopics(session.userId);
+
+        if (activeCount >= maxActive) {
+          return NextResponse.json({
+            success: false,
+            error: 'Topic limit reached',
+            message: `Hohoho! You already have ${maxActive} active topic${maxActive > 1 ? 's' : ''}. Complete or archive one before starting a new one!`,
+            activeCount,
+            maxActive,
+          }, { status: 400 });
+        }
+
         await updateTopicStatus(topicId, 'ACTIVE');
       }
     }

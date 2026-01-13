@@ -4,8 +4,14 @@ import { requireAuth } from '@/lib/auth/auth';
 import { getTopicById } from '@/lib/db/topics';
 import { updateTodayAnalytics } from '@/lib/db/progress';
 import { updateMastery } from '@/lib/learning/progress-tracker';
+import { awardXP, updateStreak } from '@/lib/learning/analytics-engine';
 import { sensieAgent } from '@/lib/mastra/agents/sensie';
 import { z } from 'zod';
+
+// XP constants for quiz completion
+const XP_PER_CORRECT_ANSWER = 15;  // Base XP per correct answer
+const XP_PERFECT_BONUS = 50;       // Bonus for 100% score
+const XP_PASSING_BONUS = 20;       // Bonus for passing (>=70%)
 
 const EvaluationSchema = z.object({
   isCorrect: z.boolean(),
@@ -158,6 +164,18 @@ Evaluate whether the answer demonstrates understanding.
 
     // Update topic mastery
     await updateMastery(topicId, session.userId);
+
+    // Award XP based on quiz performance (Bug #6 fix)
+    let xpAmount = correctCount * XP_PER_CORRECT_ANSWER;
+    if (percentage === 100) {
+      xpAmount += XP_PERFECT_BONUS;
+    } else if (passed) {
+      xpAmount += XP_PASSING_BONUS;
+    }
+    await awardXP(session.userId, xpAmount, 'quiz_completion');
+
+    // Update user streak (Bug #6 fix)
+    await updateStreak(session.userId);
 
     // Generate overall feedback
     let overallFeedback: string;

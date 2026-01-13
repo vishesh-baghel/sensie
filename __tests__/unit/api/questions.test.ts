@@ -37,6 +37,16 @@ vi.mock('@/lib/learning/progress-tracker', () => ({
   updateMastery: vi.fn(),
 }));
 
+// Mock analytics engine
+vi.mock('@/lib/learning/analytics-engine', () => ({
+  awardXP: vi.fn().mockResolvedValue(100),
+  updateStreak: vi.fn().mockResolvedValue({
+    currentStreak: 1,
+    longestStreak: 1,
+    streakBroken: false,
+  }),
+}));
+
 // Mock Sensie agent
 vi.mock('@/lib/mastra/agents/sensie', () => ({
   evaluateAnswer: vi.fn(),

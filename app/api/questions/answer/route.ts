@@ -7,7 +7,13 @@ import { getSessionById, updateSessionState } from '@/lib/db/sessions';
 import { evaluateAnswer } from '@/lib/mastra/agents/sensie';
 import { updateMastery } from '@/lib/learning/progress-tracker';
 import { updateTodayAnalytics } from '@/lib/db/progress';
+import { awardXP, updateStreak } from '@/lib/learning/analytics-engine';
 import type { SocraticContext, SocraticQuestion, QuestionType } from '@/lib/types';
+
+// XP constants for answer submissions
+const XP_CORRECT_DEEP = 20;    // Correct answer with deep understanding
+const XP_CORRECT_SHALLOW = 10; // Correct answer with shallow understanding
+const XP_INCORRECT = 2;        // Attempted but incorrect (encouragement XP)
 
 /**
  * POST /api/questions/answer
@@ -128,6 +134,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       questionsAnswered: 1,
       questionsCorrect: evaluationResult.evaluation.isCorrect ? 1 : 0,
     });
+
+    // Award XP based on answer quality (Bug #6 fix)
+    let xpAmount = XP_INCORRECT;
+    if (evaluationResult.evaluation.isCorrect) {
+      xpAmount = evaluationResult.evaluation.depth === 'DEEP'
+        ? XP_CORRECT_DEEP
+        : XP_CORRECT_SHALLOW;
+    }
+    await awardXP(session.userId, xpAmount, 'answer_submission');
+
+    // Update user streak (Bug #6 fix)
+    await updateStreak(session.userId);
 
     return NextResponse.json({
       success: true,

@@ -110,6 +110,7 @@ export async function calculateSubtopicMastery(
 
 /**
  * Update mastery percentage in database
+ * Bug #8 fix: Now also triggers subtopic unlock when threshold is reached
  */
 export async function updateMastery(
   topicId: string,
@@ -125,9 +126,10 @@ export async function updateMastery(
     },
   });
 
-  // Update subtopic masteries
+  // Update subtopic masteries and check for unlocks
   const subtopics = await prisma.subtopic.findMany({
     where: { topicId },
+    orderBy: { order: 'asc' },
   });
 
   for (const subtopic of subtopics) {
@@ -136,6 +138,22 @@ export async function updateMastery(
       where: { id: subtopic.id },
       data: { masteryPercentage: subtopicMastery },
     });
+
+    // Bug #8 fix: Check if this subtopic's mastery unlocks the next one
+    if (!subtopic.isLocked && subtopicMastery >= UNLOCK_THRESHOLD) {
+      // Find the next locked subtopic (the one right after this one)
+      const nextSubtopic = subtopics.find(
+        s => s.isLocked && s.order > subtopic.order
+      );
+
+      if (nextSubtopic) {
+        console.log(`[progress] Unlocking subtopic "${nextSubtopic.name}" (${nextSubtopic.id}) - previous subtopic reached ${subtopicMastery}% mastery`);
+        await prisma.subtopic.update({
+          where: { id: nextSubtopic.id },
+          data: { isLocked: false },
+        });
+      }
+    }
   }
 }
 
