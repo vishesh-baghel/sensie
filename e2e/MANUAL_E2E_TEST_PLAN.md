@@ -440,7 +440,10 @@
 | 18. Security | 3 | | | |
 | 19. Performance | 3 | | | |
 | 20. Integration | 3 | | | |
-| **TOTAL** | **71** | | | |
+| 21. Quiz Functionality | 3 | | | |
+| 22. Progress Tracking | 4 | | | |
+| 23. Bug Regression Tests | 5 | | | |
+| **TOTAL** | **83** | | | |
 
 ---
 
@@ -565,12 +568,13 @@
 | 3 | Complete first subtopic to 80%+ mastery | Check second subtopic | [ ] |
 | 4 | Second subtopic status | Should be unlocked | [ ] |
 
-### Test 14.2: Unlock Threshold
+### Test 14.2: Unlock Threshold (70%)
 | Step | Action | Expected Result | Pass |
 |------|--------|-----------------|------|
-| 1 | Get first subtopic to 70% mastery | Check next subtopic | [ ] |
-| 2 | Next subtopic status | Should still be locked (threshold is 80%) | [ ] |
-| 3 | Get to 80% mastery | Next subtopic unlocks | [ ] |
+| 1 | Get first subtopic to 60% mastery | Check next subtopic | [ ] |
+| 2 | Next subtopic status | Should still be locked (threshold is 70%) | [ ] |
+| 3 | Get to 70% mastery | Next subtopic unlocks automatically | [ ] |
+| 4 | Check unlock indicator | Lock icon removed, shows empty circle at 0% | [ ] |
 
 ### Test 14.3: Topic Completion
 | Step | Action | Expected Result | Pass |
@@ -733,6 +737,111 @@
 |------|--------|-----------------|------|
 | 1 | Send message while `/progress` is loading | Both complete correctly | [ ] |
 | 2 | Create topic while viewing another | Both operations succeed | [ ] |
+
+---
+
+## Test Suite 21: Quiz Functionality
+
+### Test 21.1: Quiz Command Initiation
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Type `/quiz` in active session | Quiz starts with first question | [ ] |
+| 2 | Check question format | Shows code snippet or concept question | [ ] |
+| 3 | Check answer format | Multiple choice (A-D) or open-ended | [ ] |
+| 4 | Check Master Roshi phrases | Personality present (e.g., "*adjusts sunglasses*") | [ ] |
+
+### Test 21.2: Quiz Answer Evaluation
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Answer question correctly | Sensie acknowledges and moves to next | [ ] |
+| 2 | Answer question incorrectly | Sensie provides guidance without answer | [ ] |
+| 3 | Give partial/shallow answer | Sensie asks for deeper understanding | [ ] |
+| 4 | Complete all quiz questions | Shows completion message with score | [ ] |
+
+### Test 21.3: Quiz Scoring
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Complete quiz with all correct | Shows "Perfect Score: X/X" | [ ] |
+| 2 | Check score display | Trophy/celebration emoji shown | [ ] |
+| 3 | Complete quiz with some wrong | Shows partial score (e.g., "2/3") | [ ] |
+
+---
+
+## Test Suite 22: Progress Tracking Verification
+
+### Test 22.1: XP Award System
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Give DEEP technical answer | +15 XP awarded | [ ] |
+| 2 | Give MODERATE answer | +10 XP awarded | [ ] |
+| 3 | Give SHALLOW answer | +5 XP awarded | [ ] |
+| 4 | Give incorrect but attempt | +2 XP awarded | [ ] |
+| 5 | Check XP via `/progress` | XP total matches sum of awards | [ ] |
+
+### Test 22.2: Level Progression
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Check starting level (new user) | Level 1, 0 XP | [ ] |
+| 2 | Earn 100+ XP | Level increases to 2 | [ ] |
+| 3 | Check level display | Shows correct level and XP to next | [ ] |
+
+### Test 22.3: Mastery Calculation
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Check mastery at 0% | New subtopic shows 0% | [ ] |
+| 2 | Answer questions correctly | Mastery % increases | [ ] |
+| 3 | Check topic mastery | Aggregate of subtopic masteries | [ ] |
+| 4 | Complete subtopic to 100% | Shows checkmark indicator | [ ] |
+
+### Test 22.4: Answer Tracking
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Answer a question | `/progress` shows questions +1 | [ ] |
+| 2 | Check accuracy tracking | Correct/total ratio displayed | [ ] |
+| 3 | Check today's activity | Shows today's questions and XP | [ ] |
+
+---
+
+## Test Suite 23: Bug Regression Tests
+
+### Test 23.1: Unknown Command Handling (Bug #1)
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Type `/unknowncommand` | Shows "I didn't recognize that command" | [ ] |
+| 2 | Check available commands list | Lists all 11 valid commands | [ ] |
+| 3 | Verify NOT sent to LLM | No AI response, just command handler message | [ ] |
+
+### Test 23.2: Visitor Topic Limit (Bug #2)
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Login as visitor | Visitor session created | [ ] |
+| 2 | Create first topic | Goes to Active tab | [ ] |
+| 3 | Create second topic | Goes to QUEUED tab (not Active) | [ ] |
+| 4 | Check Active tab | Shows only 1 topic | [ ] |
+
+### Test 23.3: Owner Topic Limit (Bug #7)
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Login as owner with 3 active topics | 3 topics in Active tab | [ ] |
+| 2 | Create 4th topic | Goes to QUEUED tab | [ ] |
+| 3 | Try to start QUEUED topic | Shows "Topic limit reached" error | [ ] |
+| 4 | Topic stays in Queued | Does not move to Active | [ ] |
+
+### Test 23.4: Progress Tracking (Bug #6)
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Answer Socratic question | Response evaluated by AI | [ ] |
+| 2 | Check `/progress` immediately | Questions answered incremented | [ ] |
+| 3 | Check XP | XP awarded based on answer depth | [ ] |
+| 4 | Check mastery % | Mastery increases on correct answers | [ ] |
+
+### Test 23.5: Subtopic Unlock (Bug #8)
+| Step | Action | Expected Result | Pass |
+|------|--------|-----------------|------|
+| 1 | Complete subtopic to 70%+ mastery | Mastery threshold reached | [ ] |
+| 2 | Check next subtopic | Lock icon removed automatically | [ ] |
+| 3 | Next subtopic status | Shows 0% with empty circle (clickable) | [ ] |
+| 4 | Click to start | Can navigate to newly unlocked subtopic | [ ] |
 
 ---
 
