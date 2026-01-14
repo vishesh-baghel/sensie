@@ -210,3 +210,34 @@ export interface QuizResultResponse {
   }[];
   masteryChange: number;
 }
+
+// Settings API types (Bug #9, #10 fixes)
+export interface PreferencesResponse {
+  masteryThreshold: number;
+  dailyReviewLimit: number;
+  dailyGoal: number;
+  theme: string;
+  personalityLevel: string;
+  reviewReminders: boolean;
+  achievementAlerts: boolean;
+}
+
+export interface UpdatePreferencesRequest {
+  masteryThreshold?: number;
+  dailyReviewLimit?: number;
+  dailyGoal?: number;
+  theme?: string;
+  personalityLevel?: string;
+}
+
+// Change Passphrase API types (Bug #11 fix)
+export interface ChangePassphraseRequest {
+  currentPassphrase: string;
+  newPassphrase: string;
+}
+
+export interface ChangePassphraseResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}

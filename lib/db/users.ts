@@ -65,6 +65,36 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 /**
+ * Delete all learning data for a user (keeps user account and preferences)
+ * This allows the user to start fresh without losing their account
+ */
+export async function deleteUserLearningData(userId: string): Promise<void> {
+  // Delete in order to respect foreign key constraints
+  // Topics cascade delete: Subtopics -> Concepts -> Questions
+  // LearningSession cascade delete: Messages
+  await prisma.$transaction([
+    // Delete answers (references questions and users)
+    prisma.answer.deleteMany({ where: { userId } }),
+    // Delete reviews
+    prisma.review.deleteMany({ where: { userId } }),
+    // Delete learning sessions (cascades to messages)
+    prisma.learningSession.deleteMany({ where: { userId } }),
+    // Delete topics (cascades to subtopics -> concepts -> questions)
+    prisma.topic.deleteMany({ where: { userId } }),
+    // Delete progress tracking
+    prisma.userProgress.deleteMany({ where: { userId } }),
+    // Delete badges
+    prisma.badge.deleteMany({ where: { userId } }),
+    // Delete analytics
+    prisma.learningAnalytics.deleteMany({ where: { userId } }),
+    // Delete Feynman exercises
+    prisma.feynmanExercise.deleteMany({ where: { userId } }),
+    // Delete knowledge gap records
+    prisma.knowledgeGapRecord.deleteMany({ where: { userId } }),
+  ]);
+}
+
+/**
  * Get or create user preferences
  */
 export async function getUserPreferences(

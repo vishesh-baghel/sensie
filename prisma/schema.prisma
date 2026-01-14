@@ -386,6 +386,7 @@ model UserPreferences {
 
   // Learning preferences
   dailyGoal            Int    @default(30) // Minutes per day
+  dailyReviewLimit     Int    @default(20) // Max reviews per day (5-50)
   reviewFrequency      String @default("daily") // daily, weekly
   difficultyPreference Int    @default(3) // 1-5
   masteryThreshold     Int    @default(80) // 50, 70, 80, 90, or 100

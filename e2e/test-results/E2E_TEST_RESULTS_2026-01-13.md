@@ -22,6 +22,11 @@ This test run focused on the PENDING and SKIPPED tests from the previous session
 - **Bug #7**: Owner topic limit (3) not enforced - **VERIFIED FIXED** - Shows "Topic limit reached" error
 - **Bug #8**: Subtopic unlock not triggering - **VERIFIED FIXED** - Second subtopic now unlocks at 70% mastery
 
+**New Bugs Discovered (Settings Page):**
+- **Bug #9**: Mastery Threshold slider non-functional - label doesn't update, no persistence
+- **Bug #10**: Daily Review Limit not persisted - resets on refresh
+- **Bug #11**: Change Passphrase non-functional - no API call, no validation, no feedback
+
 ---
 
 ## Test Execution Log
@@ -263,6 +268,69 @@ This test run focused on the PENDING and SKIPPED tests from the previous session
 
 ---
 
+### Test Suite 24: Settings Page (Session 5)
+
+#### Test 24.1: Mastery Threshold Slider
+| Step | Action | Result | Status |
+|------|--------|--------|--------|
+| 1 | Navigate to /settings | Settings page loads with slider at 80% | PASS |
+| 2 | Drag slider to change value | Slider thumb moves visually | PASS |
+| 3 | Check percentage label | Label stays at "80%" - doesn't update | **FAIL** |
+| 4 | Check network requests | No API call made | **FAIL** |
+| 5 | Refresh page | Value resets to 80% | **FAIL** |
+
+**Bug #9:** Mastery Threshold slider is non-functional - UI partially works but label doesn't update, no backend persistence.
+
+#### Test 24.2: Daily Review Limit Input
+| Step | Action | Result | Status |
+|------|--------|--------|--------|
+| 1 | Change value from 20 to 30 | Input accepts new value | PASS |
+| 2 | Check network requests | No API call made | **FAIL** |
+| 3 | Refresh page | Value resets to 20 | **FAIL** |
+
+**Bug #10:** Daily Review Limit input changes are not persisted - no API integration.
+
+#### Test 24.3: Change Passphrase
+| Step | Action | Result | Status |
+|------|--------|--------|--------|
+| 1 | Enter current passphrase (wrong) | Input accepts value | PASS |
+| 2 | Enter new passphrase | Input accepts value | PASS |
+| 3 | Click "Update Passphrase" | Form clears | PASS |
+| 4 | Check for error message | No error shown for wrong password | **FAIL** |
+| 5 | Check for success message | No feedback shown | **FAIL** |
+| 6 | Check network requests | No API call made | **FAIL** |
+
+**Bug #11:** Change Passphrase is completely non-functional - no validation, no API call, no user feedback.
+
+#### Test 24.4: Light/Dark Mode Toggle
+| Step | Action | Result | Status |
+|------|--------|--------|--------|
+| 1 | Click "Light mode" toggle | Theme changes to light mode | PASS |
+| 2 | Check toggle label | Changes to "Dark mode" | PASS |
+| 3 | Refresh page | Theme persists (light mode) | PASS |
+| 4 | Click "Dark mode" toggle | Theme changes back to dark | PASS |
+
+**Note:** Light/Dark mode toggle works correctly and persists via localStorage.
+
+#### Test 24.5: Logout Button
+| Step | Action | Result | Status |
+|------|--------|--------|--------|
+| 1 | Click "Logout" in sidebar | Session cleared | PASS |
+| 2 | Check redirect | Redirected to /login | PASS |
+| 3 | Check login page | Owner/Visitor tabs displayed | PASS |
+
+**Note:** Logout functionality works correctly.
+
+#### Test 24.6: Delete All Data (NOT TESTED)
+| Step | Action | Result | Status |
+|------|--------|--------|--------|
+| 1 | Danger Zone button visible | "Delete All Data" button present | PASS |
+| 2 | Click button | NOT TESTED - destructive action | SKIPPED |
+
+**Note:** Delete All Data not tested to preserve test data.
+
+---
+
 ## Summary
 
 | Suite | Total Tests | Passed | Failed | Blocked | Notes |
@@ -282,7 +350,8 @@ This test run focused on the PENDING and SKIPPED tests from the previous session
 | 20. Subtopic Structure | 7 | 7 | 0 | 0 | **Bug #8 VERIFIED FIXED** |
 | 21. Review System | 5 | 5 | 0 | 0 | Working correctly |
 | 22. Bug #7 & #8 Verification | 4 | 4 | 0 | 0 | **Both VERIFIED FIXED** |
-| **TOTAL** | **72** | **67** | **4** | **0** | **ALL BUGS FIXED!** |
+| 24. Settings Page | 17 | 9 | 7 | 1 | **3 NEW BUGS FOUND** |
+| **TOTAL** | **89** | **76** | **11** | **1** | 3 new Settings bugs |
 
 ---
 
@@ -298,6 +367,9 @@ This test run focused on the PENDING and SKIPPED tests from the previous session
 | 6 | Quiz/conversation answers NOT tracked in progress | CRITICAL - OPEN | **VERIFIED FIXED** |
 | 7 | Owner topic limit (3 max) not enforced - has 5 active | OPEN | **VERIFIED FIXED** |
 | 8 | Subtopic unlock not triggering at 70%+ mastery | OPEN | **VERIFIED FIXED** |
+| 9 | Mastery Threshold slider non-functional | NEW | **OPEN** |
+| 10 | Daily Review Limit not persisted | NEW | **OPEN** |
+| 11 | Change Passphrase non-functional | NEW | **OPEN** |
 
 ### Bug #6 Details - **FIXED**
 **Severity:** Critical - Core functionality broken
@@ -340,6 +412,51 @@ This test run focused on the PENDING and SKIPPED tests from the previous session
 - "Control Flow and Logic" automatically unlocked (no more lock icon)
 - Subtopic shows 0% with empty circle (clickable state)
 
+### Bug #9 Details - **OPEN**
+**Severity:** High - Settings not functional
+**Status:** **OPEN**
+**Location:** `/settings` page - Mastery Threshold slider
+**Description:**
+- Slider can be dragged visually but percentage label stays at "80%"
+- No `onChange` handler calling API to save preference
+- Changes lost on page refresh
+**Root Cause:** Missing API integration - slider UI exists but no backend persistence
+**Fix Required:**
+- Add onChange handler to slider component
+- Create API endpoint `/api/settings/preferences` to save user preferences
+- Load saved preferences on page mount
+
+### Bug #10 Details - **OPEN**
+**Severity:** High - Settings not functional
+**Status:** **OPEN**
+**Location:** `/settings` page - Daily Review Limit input
+**Description:**
+- Number input accepts new values (e.g., changing 20 to 30)
+- No API call made when value changes
+- Value resets to default (20) on page refresh
+**Root Cause:** Missing API integration - same as Bug #9
+**Fix Required:**
+- Add onChange/onBlur handler to save preference
+- Use same `/api/settings/preferences` endpoint
+
+### Bug #11 Details - **OPEN**
+**Severity:** Critical - Security feature broken
+**Status:** **OPEN**
+**Location:** `/settings` page - Change Passphrase form
+**Description:**
+- Form accepts current and new passphrase inputs
+- Clicking "Update Passphrase" clears form without any action
+- No validation of current passphrase (wrong password accepted silently)
+- No success/error message shown to user
+- No API call made to `/api/auth/change-password` or similar
+**Root Cause:** Form submission handler not implemented
+**Fix Required:**
+- Implement form submission handler
+- Create API endpoint `/api/auth/change-passphrase`
+- Validate current passphrase against stored hash
+- Show appropriate success/error feedback
+- Clear form only on success
+
 ---
 
 ## Tests Still Pending (Require Specific State)
@@ -370,28 +487,33 @@ The following tests were not executed because they require specific prerequisite
 
 ## Recommendations
 
-### Priority 1 - Critical (Bug #6)
-1. **Fix Progress Tracking**: Investigate why quiz/conversation answers are not persisted to the database
-   - Check if Answer records are being created in `lib/db/answers.ts`
-   - Verify progress update logic in `lib/db/progress.ts`
-   - Check if LLM evaluation results are saved
-   - This blocks ALL mastery-dependent features
+### Priority 1 - Critical
+1. ~~**Fix Progress Tracking (Bug #6)**~~ - **FIXED**
+2. **Fix Change Passphrase (Bug #11)**: Security feature completely non-functional
+   - Implement form submission handler in Settings page
+   - Create `/api/auth/change-passphrase` endpoint
+   - Validate current passphrase, hash new passphrase
+   - Show success/error feedback to user
 
 ### Priority 2 - High
-2. **Fix Owner Topic Limit (Bug #7)**: Enforce 3 active topic limit for owner accounts
-   - Check topic creation logic in `lib/db/topics.ts`
-   - Add validation before setting topic to ACTIVE status
+3. ~~**Fix Owner Topic Limit (Bug #7)**~~ - **FIXED**
+4. **Fix Settings Persistence (Bugs #9, #10)**: Learning preferences not saved
+   - Create `/api/settings/preferences` endpoint
+   - Add onChange handlers to slider and number input
+   - Load saved preferences on Settings page mount
+   - Store in User model or separate UserPreferences table
 
 ### Priority 3 - Medium
-3. **Bug #3 Investigation**: The /continue command display issue should still be investigated
-4. **Automated Testing**: Add Playwright/Cypress tests for:
+5. **Bug #3 Investigation**: The /continue command display issue should still be investigated
+6. **Automated Testing**: Add Playwright/Cypress tests for:
    - Progress tracking flow
    - Topic limit enforcement
+   - Settings page persistence
    - Previously fixed bugs (regression prevention)
 
 ### Priority 4 - Low
-5. **Visitor Auto-Session**: Document the /chat auto-visitor-session behavior if intentional
-6. **Topic Name Typo**: "pyhton" topic has a typo (cosmetic)
+7. **Visitor Auto-Session**: Document the /chat auto-visitor-session behavior if intentional
+8. **Topic Name Typo**: "pyhton" topic has a typo (cosmetic)
 
 ---
 
@@ -438,10 +560,25 @@ The following tests were not executed because they require specific prerequisite
   - Shows empty circle at 0% (clickable state)
   - Unlock threshold: 70% mastery
 
+### Session 5 (Settings Page Testing)
+- Comprehensive Settings page testing
+- **Discovered 3 NEW BUGS (#9, #10, #11)** - all related to missing API integration
+- Settings page UI exists but backend persistence not implemented
+- **Working features:**
+  - Light/Dark mode toggle (uses localStorage)
+  - Logout button (redirects to /login)
+- **Broken features:**
+  - Mastery Threshold slider (Bug #9)
+  - Daily Review Limit input (Bug #10)
+  - Change Passphrase form (Bug #11)
+- Delete All Data button not tested (destructive action)
+
 ### Combined Session Summary
-- Test session duration: ~150 minutes total
-- **ALL 8 BUGS NOW FIXED AND VERIFIED!**
-- Bug #1, #2, #4, #6, #7, #8 verified in this session
+- Test session duration: ~180 minutes total
+- **Bugs #1-8 FIXED AND VERIFIED!**
+- **3 NEW BUGS FOUND (#9, #10, #11)** on Settings page
+- Bug #1, #2, #4, #6, #7, #8 verified fixed
 - Bug #3 not tested (low priority)
 - Bug #5 confirmed as Bug #6 (now fixed)
-- Core Sensie functionality fully operational!
+- Core Sensie learning functionality operational
+- Settings page needs API integration work
