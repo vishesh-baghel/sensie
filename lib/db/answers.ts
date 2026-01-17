@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { Answer, AnswerDepth } from '@prisma/client';
+import type { Answer, AnswerDepth } from '.prisma/client-sensie';
 
 /**
  * Create an answer

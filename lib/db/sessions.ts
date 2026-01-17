@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { LearningSession, Message, MessageRole, Prisma } from '@prisma/client';
+import type { LearningSession, Message, MessageRole, Prisma } from '.prisma/client-sensie';
 
 const MAX_SKIPS = 3;
 

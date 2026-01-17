@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { User, UserPreferences, UserRole } from '@prisma/client';
+import type { User, UserPreferences, UserRole } from '.prisma/client-sensie';
 
 /**
  * Create a new user

@@ -6,7 +6,7 @@ import type {
   Answer,
   Message,
 } from '@/lib/types';
-import type { LearningSession } from '@prisma/client';
+import type { LearningSession } from '.prisma/client-sensie';
 import { prisma } from '@/lib/db/client';
 
 /**

@@ -9,7 +9,7 @@ import type {
   QuestionType,
   AnswerDepth,
   UserRole,
-} from '@prisma/client';
+} from '.prisma/client-sensie';
 
 // Re-export Prisma enums
 export { TopicStatus, QuestionType, AnswerDepth, UserRole };

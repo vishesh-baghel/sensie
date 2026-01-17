@@ -2,7 +2,7 @@ import type {
   UserProgress as PrismaUserProgress,
   Badge as PrismaBadge,
   LearningAnalytics as PrismaLearningAnalytics,
-} from '@prisma/client';
+} from '.prisma/client-sensie';
 
 export type UserProgress = PrismaUserProgress;
 export type Badge = PrismaBadge;

@@ -1,4 +1,4 @@
-import type { TopicStatus, AnswerDepth, ReviewStatus } from '@prisma/client';
+import type { TopicStatus, AnswerDepth, ReviewStatus } from '.prisma/client-sensie';
 
 // Generic API response
 export interface ApiResponse<T = unknown> {

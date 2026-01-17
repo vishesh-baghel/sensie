@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { Question, QuestionType } from '@prisma/client';
+import type { Question, QuestionType } from '.prisma/client-sensie';
 
 /**
  * Create a question for a concept

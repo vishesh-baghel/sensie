@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { Review, ReviewType, ReviewStatus } from '@prisma/client';
+import type { Review, ReviewType, ReviewStatus } from '.prisma/client-sensie';
 
 const MAX_REVIEWS_PER_SESSION = 20;
 

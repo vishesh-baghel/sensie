@@ -2,7 +2,7 @@ import type {
   LearningSession as PrismaLearningSession,
   Message as PrismaMessage,
   MessageRole,
-} from '@prisma/client';
+} from '.prisma/client-sensie';
 
 // Re-export Prisma enums
 export { MessageRole };

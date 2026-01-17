@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/auth/auth';
 import { getReviewById, updateReviewAfterRating } from '@/lib/db/reviews';
 import { updateTodayAnalytics } from '@/lib/db/progress';
 import { fsrs, Grade, Rating } from 'ts-fsrs';
-import type { ReviewStatus } from '@prisma/client';
+import type { ReviewStatus } from '.prisma/client-sensie';
 
 // Initialize FSRS scheduler
 const scheduler = fsrs();

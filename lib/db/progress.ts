@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { UserProgress, Badge, LearningAnalytics } from '@prisma/client';
+import type { UserProgress, Badge, LearningAnalytics } from '.prisma/client-sensie';
 
 // XP thresholds for each level (1-10)
 const LEVEL_THRESHOLDS = [0, 100, 300, 600, 1000, 1500, 2100, 2800, 3600, 4500];

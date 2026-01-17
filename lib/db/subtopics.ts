@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { Subtopic } from '@prisma/client';
+import type { Subtopic } from '.prisma/client-sensie';
 
 /**
  * Create subtopics for a topic (batch create)

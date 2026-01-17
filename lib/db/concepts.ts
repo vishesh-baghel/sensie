@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { Concept } from '@prisma/client';
+import type { Concept } from '.prisma/client-sensie';
 
 /**
  * Create a concept for a subtopic

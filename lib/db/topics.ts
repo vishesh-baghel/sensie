@@ -1,5 +1,5 @@
 import { prisma } from './client';
-import type { Topic, TopicStatus } from '@prisma/client';
+import type { Topic, TopicStatus } from '.prisma/client-sensie';
 
 const MAX_ACTIVE_TOPICS = 3;
 

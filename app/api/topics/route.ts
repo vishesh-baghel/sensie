@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/auth/auth';
 import { getTopicsByUser, countActiveTopics } from '@/lib/db/topics';
 import { generatePath, createTopicFromPath } from '@/lib/learning/learning-path-generator';
 import { topicsLogger } from '@/lib/observability/logger';
-import type { TopicStatus } from '@prisma/client';
+import type { TopicStatus } from '.prisma/client-sensie';
 
 const MAX_ACTIVE_TOPICS = 3;
 

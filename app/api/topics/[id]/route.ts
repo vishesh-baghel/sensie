@@ -9,7 +9,7 @@ import {
   startTopic,
   completeTopic,
 } from '@/lib/db/topics';
-import type { TopicStatus } from '@prisma/client';
+import type { TopicStatus } from '.prisma/client-sensie';
 
 interface RouteParams {
   params: Promise<{ id: string }>;

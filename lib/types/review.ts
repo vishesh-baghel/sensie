@@ -2,7 +2,7 @@ import type {
   Review as PrismaReview,
   ReviewType,
   ReviewStatus,
-} from '@prisma/client';
+} from '.prisma/client-sensie';
 
 // Re-export Prisma enums
 export { ReviewType, ReviewStatus };

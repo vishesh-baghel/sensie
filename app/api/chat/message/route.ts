@@ -13,7 +13,7 @@ import { updateMastery } from '@/lib/learning/progress-tracker';
 import { updateTodayAnalytics } from '@/lib/db/progress';
 import { awardXP, updateStreak } from '@/lib/learning/analytics-engine';
 import { prisma } from '@/lib/db/client';
-import type { AnswerDepth, QuestionType } from '@prisma/client';
+import type { AnswerDepth, QuestionType } from '.prisma/client-sensie';
 
 // XP constants for chat-based answers
 const XP_CORRECT_DEEP = 15;
