@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { prisma } from './client';
 import type { Topic, TopicStatus } from '.prisma/client-sensie';
 
@@ -23,11 +24,12 @@ export async function createTopic(data: {
 
 /**
  * Get all topics for a user with subtopics
+ * Cached to avoid duplicate queries within a request
  */
-export async function getTopicsByUser(
+export const getTopicsByUser = cache(async (
   userId: string,
   status?: TopicStatus
-) {
+) => {
   return prisma.topic.findMany({
     where: {
       userId,
@@ -46,25 +48,27 @@ export async function getTopicsByUser(
     },
     orderBy: { updatedAt: 'desc' },
   });
-}
+});
 
 /**
  * Get topic by ID with optional subtopics
+ * Cached to avoid duplicate queries within a request
  */
-export async function getTopicById(
+export const getTopicById = cache(async (
   topicId: string,
   includeSubtopics: boolean = false
-): Promise<Topic | null> {
+): Promise<Topic | null> => {
   return prisma.topic.findUnique({
     where: { id: topicId },
     include: includeSubtopics ? { subtopics: { orderBy: { order: 'asc' } } } : undefined,
   });
-}
+});
 
 /**
  * Get active topics for a user (max 3)
+ * Cached to avoid duplicate queries within a request
  */
-export async function getActiveTopics(userId: string): Promise<Topic[]> {
+export const getActiveTopics = cache(async (userId: string): Promise<Topic[]> => {
   return prisma.topic.findMany({
     where: {
       userId,
@@ -73,19 +77,20 @@ export async function getActiveTopics(userId: string): Promise<Topic[]> {
     orderBy: { updatedAt: 'desc' },
     take: MAX_ACTIVE_TOPICS,
   });
-}
+});
 
 /**
  * Count active topics for a user
+ * Cached to avoid duplicate queries within a request
  */
-export async function countActiveTopics(userId: string): Promise<number> {
+export const countActiveTopics = cache(async (userId: string): Promise<number> => {
   return prisma.topic.count({
     where: {
       userId,
       status: 'ACTIVE',
     },
   });
-}
+});
 
 /**
  * Update topic status

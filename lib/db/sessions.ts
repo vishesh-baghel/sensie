@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { prisma } from './client';
 import type { LearningSession, Message, MessageRole, Prisma } from '.prisma/client-sensie';
 
@@ -25,39 +26,42 @@ export async function createSession(data: {
 
 /**
  * Get session by ID with optional messages
+ * Cached to avoid duplicate queries within a request
  */
-export async function getSessionById(
+export const getSessionById = cache(async (
   sessionId: string,
   includeMessages: boolean = false
-): Promise<LearningSession | null> {
+): Promise<LearningSession | null> => {
   return prisma.learningSession.findUnique({
     where: { id: sessionId },
     include: includeMessages ? { messages: { orderBy: { createdAt: 'asc' } } } : undefined,
   });
-}
+});
 
 /**
  * Get active session for a topic
+ * Cached to avoid duplicate queries within a request
  */
-export async function getActiveSession(
+export const getActiveSession = cache(async (
   topicId: string
-): Promise<LearningSession | null> {
+): Promise<LearningSession | null> => {
   return prisma.learningSession.findUnique({
     where: { topicId },
   });
-}
+});
 
 /**
  * Get active sessions for a user
+ * Cached to avoid duplicate queries within a request
  */
-export async function getActiveSessionsByUser(
+export const getActiveSessionsByUser = cache(async (
   userId: string
-): Promise<LearningSession[]> {
+): Promise<LearningSession[]> => {
   return prisma.learningSession.findMany({
     where: { userId, isActive: true },
     orderBy: { lastActivity: 'desc' },
   });
-}
+});
 
 /**
  * Update session state

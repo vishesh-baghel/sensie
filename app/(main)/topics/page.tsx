@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import useSWR from 'swr';
 import { Plus, ChevronRight, Check, Lock, MoreHorizontal, Archive, ArchiveRestore, Loader2, RefreshCw, Trash2, PlayCircle, CheckCircle } from 'lucide-react';
 import {
   DropdownMenu,
@@ -12,9 +13,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { fetcher } from '@/lib/swr/config';
 
 /**
- * Topics Page - Integrated with backend API
+ * Topics Page - Refactored with SWR for better caching and performance
  */
 
 type TopicStatus = 'ACTIVE' | 'COMPLETED' | 'QUEUED' | 'ARCHIVED';
@@ -41,51 +43,32 @@ type FilterType = 'ACTIVE' | 'COMPLETED' | 'QUEUED' | 'ARCHIVED';
 
 export default function TopicsPage() {
   const router = useRouter();
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>('ACTIVE');
   const [showNewTopic, setShowNewTopic] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
   const [newTopicGoal, setNewTopicGoal] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  const fetchTopics = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch(`/api/topics?status=${filter}`);
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to fetch topics');
-      }
-
-      const data = await response.json();
-      setTopics(data.topics || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load topics');
-    } finally {
-      setLoading(false);
+  // Use SWR for automatic caching, revalidation, and deduplication
+  const { data, error, isLoading, mutate } = useSWR<{ topics: Topic[] }>(
+    `/api/topics?status=${filter}`,
+    fetcher,
+    {
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
     }
-  }, [filter, router]);
+  );
 
-  useEffect(() => {
-    fetchTopics();
-  }, [fetchTopics]);
-
-  // Topics are already filtered by the API based on status
-  const filteredTopics = topics;
+  const topics = data?.topics || [];
+  const displayError = localError || (error ? 'Failed to load topics' : null);
 
   const handleCreateTopic = async () => {
     if (!newTopicName.trim()) return;
 
     try {
       setCreating(true);
-      setError(null);
+      setLocalError(null);
 
       const response = await fetch('/api/topics', {
         method: 'POST',
@@ -97,34 +80,36 @@ export default function TopicsPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const errorData = await response.json();
         if (response.status === 403) {
-          throw new Error(data.error || 'Maximum 3 active topics allowed. Complete or archive one first.');
+          throw new Error(errorData.error || 'Maximum 3 active topics allowed. Complete or archive one first.');
         }
-        throw new Error(data.error || 'Failed to create topic');
+        throw new Error(errorData.error || 'Failed to create topic');
       }
 
-      const data = await response.json();
-      const newTopic = data.topic;
+      const { topic: newTopic } = await response.json();
 
-      // Only add to current list if the topic's status matches the current filter
-      // QUEUED topics should not appear in the ACTIVE tab
+      // Optimistically update cache
       if (newTopic.status === filter) {
-        setTopics([newTopic, ...topics]);
+        mutate(
+          (current) => ({
+            topics: [newTopic, ...(current?.topics || [])],
+          }),
+          { revalidate: false }
+        );
       } else if (newTopic.status === 'QUEUED' && filter === 'ACTIVE') {
-        // Topic was queued due to limit - switch to QUEUED tab to show it
+        // Switch to QUEUED tab - SWR will auto-fetch
         setFilter('QUEUED');
-        setTopics([newTopic]);
       } else {
-        // Refresh to get correct list
-        await fetchTopics();
+        // Revalidate to get correct list
+        mutate();
       }
 
       setNewTopicName('');
       setNewTopicGoal('');
       setShowNewTopic(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create topic');
+      setLocalError(err instanceof Error ? err.message : 'Failed to create topic');
     } finally {
       setCreating(false);
     }
@@ -132,6 +117,7 @@ export default function TopicsPage() {
 
   const handleArchiveTopic = async (topicId: string) => {
     try {
+      setLocalError(null);
       const response = await fetch(`/api/topics/${topicId}`, {
         method: 'DELETE',
       });
@@ -140,15 +126,23 @@ export default function TopicsPage() {
         throw new Error('Failed to archive topic');
       }
 
-      // Remove from current list since we filter by status
-      setTopics(topics.filter(t => t.id !== topicId));
+      // Optimistically update cache (functional update)
+      mutate(
+        (current) => ({
+          topics: (current?.topics || []).filter(t => t.id !== topicId),
+        }),
+        { revalidate: false }
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to archive topic');
+      setLocalError(err instanceof Error ? err.message : 'Failed to archive topic');
+      // Revalidate on error to restore correct state
+      mutate();
     }
   };
 
   const handleUnarchiveTopic = async (topicId: string) => {
     try {
+      setLocalError(null);
       const response = await fetch(`/api/topics/${topicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -159,15 +153,22 @@ export default function TopicsPage() {
         throw new Error('Failed to unarchive topic');
       }
 
-      // Remove from current list since status changed
-      setTopics(topics.filter(t => t.id !== topicId));
+      // Optimistically remove from archived list (functional update)
+      mutate(
+        (current) => ({
+          topics: (current?.topics || []).filter(t => t.id !== topicId),
+        }),
+        { revalidate: false }
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to unarchive topic');
+      setLocalError(err instanceof Error ? err.message : 'Failed to unarchive topic');
+      mutate();
     }
   };
 
   const handleMarkCompleted = async (topicId: string) => {
     try {
+      setLocalError(null);
       const response = await fetch(`/api/topics/${topicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -178,28 +179,36 @@ export default function TopicsPage() {
         throw new Error('Failed to mark topic as completed');
       }
 
-      setTopics(topics.map(t =>
-        t.id === topicId ? { ...t, status: 'COMPLETED' as TopicStatus } : t
-      ));
+      // Optimistically update topic status (functional update)
+      mutate(
+        (current) => ({
+          topics: (current?.topics || []).map(t =>
+            t.id === topicId ? { ...t, status: 'COMPLETED' as TopicStatus } : t
+          ),
+        }),
+        { revalidate: false }
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update topic');
+      setLocalError(err instanceof Error ? err.message : 'Failed to update topic');
+      mutate();
     }
   };
 
   const handleStartTopic = async (topicId: string) => {
     try {
+      setLocalError(null);
       const response = await fetch(`/api/topics/${topicId}/start`, {
         method: 'POST',
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to start topic');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start topic');
       }
 
       router.push(`/chat?topic=${topicId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start learning');
+      setLocalError(err instanceof Error ? err.message : 'Failed to start learning');
     }
   };
 
@@ -233,11 +242,11 @@ export default function TopicsPage() {
             </h1>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => fetchTopics()}
-                disabled={loading}
+                onClick={() => mutate()}
+                disabled={isLoading}
                 className="p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] rounded-md"
               >
-                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
               </button>
               <button
                 onClick={() => setShowNewTopic(true)}
@@ -253,11 +262,11 @@ export default function TopicsPage() {
 
       <main className="max-w-3xl mx-auto px-6 py-6">
         {/* Error message */}
-        {error && (
+        {displayError && (
           <div className="mb-6 p-4 border border-[hsl(var(--destructive))/0.3] rounded-lg bg-[hsl(var(--destructive))/0.1] text-[hsl(var(--destructive))]">
-            <p className="text-sm">{error}</p>
+            <p className="text-sm">{displayError}</p>
             <button
-              onClick={() => setError(null)}
+              onClick={() => setLocalError(null)}
               className="text-xs underline mt-1"
             >
               Dismiss
@@ -347,16 +356,16 @@ export default function TopicsPage() {
         )}
 
         {/* Loading state */}
-        {loading && topics.length === 0 && (
+        {isLoading && topics.length === 0 && (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 animate-spin text-[hsl(var(--muted-foreground))]" />
           </div>
         )}
 
         {/* Topics list */}
-        {!loading && (
+        {!isLoading && (
           <div className="space-y-3">
-            {filteredTopics.map((topic) => (
+            {topics.map((topic) => (
               <TopicCard
                 key={topic.id}
                 topic={topic}
@@ -371,7 +380,7 @@ export default function TopicsPage() {
           </div>
         )}
 
-        {!loading && filteredTopics.length === 0 && (
+        {!isLoading && topics.length === 0 && (
           <div className="text-center py-12">
             <p className="text-[hsl(var(--muted-foreground))]">
               No {filter.toLowerCase()} topics.

@@ -68,7 +68,12 @@ export async function POST(request: NextRequest) {
     let topic = null;
 
     if (topicId) {
-      topic = await getTopicById(topicId);
+      // OPTIMIZATION: Start both operations immediately to avoid waterfall
+      [topic, learningSession] = await Promise.all([
+        getTopicById(topicId),
+        getActiveSession(topicId),
+      ]);
+
       if (!topic || topic.userId !== session.userId) {
         return new Response(JSON.stringify({ error: 'Topic not found' }), {
           status: 404,
@@ -76,7 +81,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      learningSession = await getActiveSession(topicId);
+      // Create session if needed (can't parallelize this - depends on check above)
       if (!learningSession) {
         learningSession = await createSession({
           userId: session.userId,
@@ -210,13 +215,7 @@ async function evaluateAndTrackProgress(
 
     console.log('[chat] Answer record created:', answer.id);
 
-    // Update daily analytics
-    await updateTodayAnalytics(userId, {
-      questionsAnswered: 1,
-      questionsCorrect: evaluation.isCorrect ? 1 : 0,
-    });
-
-    // Award XP based on evaluation
+    // Calculate XP amount (cheap, synchronous)
     let xpAmount = XP_ATTEMPT;
     if (evaluation.isCorrect) {
       if (evaluation.depth === 'DEEP') {
@@ -227,16 +226,20 @@ async function evaluateAndTrackProgress(
         xpAmount = XP_CORRECT_SHALLOW;
       }
     }
-    await awardXP(userId, xpAmount, 'chat_answer');
-    console.log(`[chat] Awarded ${xpAmount} XP for ${evaluation.depth} ${evaluation.isCorrect ? 'correct' : 'incorrect'} answer`);
 
-    // Update streak
-    await updateStreak(userId);
-    console.log('[chat] Streak updated');
+    // OPTIMIZATION: Run analytics in parallel (faster than sequential)
+    // Note: We await these to ensure they complete, but they run concurrently
+    await Promise.all([
+      updateTodayAnalytics(userId, {
+        questionsAnswered: 1,
+        questionsCorrect: evaluation.isCorrect ? 1 : 0,
+      }),
+      awardXP(userId, xpAmount, 'chat_answer'),
+      updateStreak(userId),
+      updateMastery(topicId, userId),
+    ]);
 
-    // Update topic mastery
-    await updateMastery(topicId, userId);
-    console.log('[chat] Mastery updated');
+    console.log(`[chat] Analytics complete: ${xpAmount} XP, streak updated, mastery updated`);
 
   } catch (error) {
     // Log error but don't fail the request - chat should still work
